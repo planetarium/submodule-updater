@@ -81,6 +81,36 @@ You can customize the pull request template:
 ~~~
 
 
+CLI
+---
+
+*Needs to be documented further.*
+
+It basically follows the ordinary architecture of Python CLI apps.  It requires
+recent versions of Python.  I tested it on Python 3.9 and 3.10.  It may work
+on older versions, but I'm not sure.
+
+First of all, you probably need an isolated virtualenv:
+
+~~~ bash
+python3 -m venv .venv
+source .venv/bin/activate
+~~~
+
+You can install the dependencies using the latest pip:
+
+~~~ bash
+pip3 install -e .
+~~~
+
+The root package `sur` has its own main function.  It's a simple CLI app
+that consists of only a single command.  Try `--help` to get started:
+
+~~~ bash
+python3 -m sur --help
+~~~
+
+
 Known issues
 ------------
 
