@@ -78,13 +78,12 @@ def log_error(
 
 class WorkflowHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
+        msg = record.getMessage()
         if record.levelno >= logging.ERROR:
-            log_error(record.msg, record.name, record.pathname, record.lineno)
+            log_error(msg, record.name, record.pathname, record.lineno)
         elif record.levelno >= logging.WARNING:
-            log_warning(
-                record.msg, record.name, record.pathname, record.lineno
-            )
+            log_warning(msg, record.name, record.pathname, record.lineno)
         elif record.levelno >= logging.INFO:
-            log_notice(record.msg, record.name, record.pathname, record.lineno)
+            log_notice(msg, record.name, record.pathname, record.lineno)
         else:
-            log_debug(record.msg)
+            log_debug(msg)

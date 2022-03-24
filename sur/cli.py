@@ -83,8 +83,7 @@ def validate_targets(
         try:
             repo, branch = target.split(":", 1)
         except ValueError:
-            repo = target
-            branch = None
+            raise click.BadParameter(f"No branch name: {r}")
         m = GITHUB_REPOSITORY_RE.match(repo)
         if not m:
             raise click.BadParameter(
@@ -109,6 +108,7 @@ def validate_targets(
     required=True,
     envvar="GITHUB_TOKEN",
     callback=validate_github_token,
+    help="an access token to be used to fork, clone, push, and open PRs",
 )
 @click.option(
     "--source-repository",
@@ -116,9 +116,17 @@ def validate_targets(
     required=True,
     envvar="GITHUB_REPOSITORY",
     callback=validate_repository,
+    help="the dependent repository to be referred as submodules by "
+    "other repositories (e.g., org/repo-name)",
 )
 @click.option(
-    "--ref", "-r", required=True, envvar="GITHUB_REF", callback=validate_ref
+    "--ref",
+    "-r",
+    required=True,
+    envvar="GITHUB_REF",
+    callback=validate_ref,
+    help="submodule heads in the dependent repositories will become to "
+    "refer to to this (e.g., refs/tags/1.2.3, refs/heads/master)",
 )
 @click.option(
     "--committer",
@@ -126,12 +134,15 @@ def validate_targets(
     required=True,
     metavar="NAME <EMAIL>",
     callback=validate_signature,
+    help="name and email address to be signed with on the commit "
+    "(e.g., Your Name <email@example.com>)",
 )
 @click.option("--pr-title", "-T", metavar="FORMAT")
 @click.option("--pr-description", "-D", metavar="FORMAT")
+@click.option("--dry-run", is_flag=True)
 @click.argument(
     "targets",
-    metavar="TARGET_REPOSITORY[:BRANCH]",
+    metavar="TARGET_REPOSITORY:BRANCH",
     required=True,
     nargs=-1,
     callback=validate_targets,
@@ -143,10 +154,19 @@ def cli(
     source_repository: GHRepository,
     ref: str,
     targets: Mapping[GHRepository, Branch],
-    pr_title: Optional[str],
-    pr_description: Optional[str],
     committer: Signature,
+    pr_title: Optional[str] = None,
+    pr_description: Optional[str] = None,
+    dry_run: bool = False,
 ):
+    """Update submodules in dependent repositories.  See also the README docs.
+
+    TARGET_REPOSITORY is a GitHub repository (in the form of org/repo-name)
+    that needs to update its submodule(s) referring the source repository.
+
+    BRANCH is the branch name in the target repository that will be updated.
+
+    """
     try:
         reference = source_repository.ref(ref[5:])
     except NotFoundError:
@@ -169,4 +189,5 @@ def cli(
             config, pr_description_format=pr_description
         )
     logging.info("Configuration: %r", config)
-    run(config)
+    if not dry_run:
+        run(config)

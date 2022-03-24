@@ -1,6 +1,7 @@
 [project]
 name = "submodule-updater"
 description = "Open pull request or push a commit to update submodule"
+license = { file = "LICENSE" }
 version = "0.1.0"
 dependencies = [
   "click >= 8.0.4, < 9.0.0",
