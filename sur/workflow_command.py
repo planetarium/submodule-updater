@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Literal
+from typing import Literal, Optional
 
 
 def escape(s: str) -> str:

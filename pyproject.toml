@@ -1,15 +1,17 @@
 [project]
-name = "submodule-update-request"
-description = "Open pull request to update submodule"
+name = "submodule-updater"
+description = "Open pull request or push a commit to update submodule"
 version = "0.1.0"
 dependencies = [
   "click >= 8.0.4, < 9.0.0",
   "github3.py >= 3.2.0, < 4.0.0",
+  "pygit2 >= 1.9.0, < 2.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "black >= 22.1.0, < 23.0.0",
+  "pynvim >= 0.4.3"
 ]
 
 [build-system]
