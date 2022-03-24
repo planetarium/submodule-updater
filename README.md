@@ -24,7 +24,7 @@ in certain cases.[^2])
 
 [^2]: If the Submodule Updater is allowed to push to the dependent repository,
       and there are no changes in the source tree level (i.e., the previous
-      commit and the new commit shares the same tree hash in Git) from
+      commit and the new commit share the same tree hash in Git) from
       the submodule repository, it tries to directly push an updating commit
       to the dependent repository.
 
