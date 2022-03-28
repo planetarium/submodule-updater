@@ -38,7 +38,7 @@ It's intended to be mainly used in GitHub Actions workflows.  (It can be
 manually invoked as a CLI program on your terminal though.)
 
 ~~~ yaml
-- uses: planetarium/submodule-updater:main
+- uses: planetarium/submodule-updater@main
   if: github.ref_type == 'tag'
   with:
     token: ${{ secrets.GH_PAT }}  # PAT of a bot account on GitHub
@@ -52,7 +52,7 @@ manually invoked as a CLI program on your terminal though.)
 You can customize the pull request template:
 
 ~~~ yaml
-- uses: planetarium/submodule-updater:main
+- uses: planetarium/submodule-updater@main
   if: github.ref_type == 'tag'
   with:
     token: ${{ secrets.GH_PAT }}  # PAT of a bot account on GitHub
