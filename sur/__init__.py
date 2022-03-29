@@ -1,4 +1,4 @@
-""sur --- Submodule Updater
+"""sur --- Submodule Updater
 
 Anyway, what does sur stand for?  It's nothing as of now.  Actually I named it
 after submodule-update-request, but as its architecture and goals were slighly
