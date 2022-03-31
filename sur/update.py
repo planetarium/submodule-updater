@@ -18,7 +18,7 @@ from pygit2 import (
     Repository,
     Signature,
 )
-from pygit2.remote import TransferProgress
+from pygit2.remote import Remote, TransferProgress
 
 from .config import Config, GHRepository
 
@@ -259,9 +259,7 @@ def open_pull_request(
         f"{commit.short_id}"
     )
     cloned_repository.create_branch(temp_branch_name, commit, True)
-    remote.push(
-        [f"refs/heads/{temp_branch_name}:refs/heads/{temp_branch_name}"]
-    )
+    push(cloned_repository, remote, f"refs/heads/{temp_branch_name}")
     format_ctx = dict(
         submodule_repository=submodule_source_repository,
         submodule_ref=submodule_ref,
@@ -293,9 +291,7 @@ def push_commit(
     remote = cloned_repository.remotes.create(
         f"tmp-push--{commit.short_id}", push_url
     )
-    remote.push(
-        [f"refs/heads/{temp_branch_name}:refs/heads/{target_branch.name}"]
-    )
+    push(cloned_repository, remote, f"refs/heads/{temp_branch_name}")
 
 
 def get_authenticated_push_url(github: GitHub, repo: GHRepository) -> str:
@@ -366,3 +362,21 @@ def fetch_object(repo: Repository, oid: Oid):
             raise GitError(
                 f"Failed to fetch object {oid.hex} from {remote.url}"
             )
+
+
+def push(repo: Repository, remote: Remote, refspec: str):
+    assert refspec.startswith((f"refs/heads/", f"refs/tags/"))
+    proc = subprocess.Popen(
+        ["git", "push", remote.name, f"{refspec}:{refspec}"],
+        cwd=repo.workdir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    with proc.stdout as stdout:
+        for diag_msg in stdout:
+            logging.debug("%s", diag_msg.rstrip())
+    if proc.wait():
+        raise GitError(
+            f"Failed to push {refspec} to {remote.url}"
+        )
