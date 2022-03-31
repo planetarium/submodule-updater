@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import tempfile
 from typing import Optional, Tuple
 
@@ -15,7 +16,6 @@ from pygit2 import (
     RemoteCallbacks,
     Repository,
     Signature,
-    clone_repository,
 )
 from pygit2.remote import TransferProgress
 
@@ -139,14 +139,30 @@ def clone(
         target_branch.name,
         d,
     )
-    repo = clone_repository(
-        target_repository.clone_url,
-        d,
-        checkout_branch=target_branch.name,
-        callbacks=LoggingRemoteCallbacks(),
+    proc = subprocess.Popen(
+        [
+            "git",
+            "clone",
+            "--branch",
+            target_branch.name,
+            "--recurse-submodules",
+            target_repository.clone_url,
+            d,
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
     )
-    logging.info("Initializing submodules...")
-    repo.init_submodules()
+    with proc.stdout as stdout:
+        for diag_msg in stdout:
+            logging.debug("%s", diag_msg.rstrip())
+    if proc.wait():
+        raise GitError(
+            f"Failed to clone {target_repository.full_name}:"
+            f"{target_repository.name} to {d}",
+        )
+    repo = Repository(d)
     logging.info(
         "Cloned %s:%s to %s",
         target_repository.full_name,
