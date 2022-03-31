@@ -10,6 +10,7 @@ from github3.pulls import ShortPullRequest
 from github3.repos.branch import Branch
 from github3.session import BasicAuth, TokenAuth
 from pygit2 import (
+    GIT_FETCH_NO_PRUNE,
     GIT_RESET_HARD,
     GitError,
     Oid,
@@ -190,13 +191,20 @@ def update_submodules(
         submodule = cloned_repository.lookup_submodule(submodule_path)
         if not match_remote_url(submodule_source_repository, submodule.url):
             continue
-        cloned_repository.update_submodules(
-            [submodule_path], init=True, callbacks=LoggingRemoteCallbacks()
-        )
-        subrepo = submodule.open()
+        subrepo: Repository = submodule.open()
         if subrepo.head.target == oid:
             continue
-        ref_object = subrepo.revparse_single(ref_sha)
+        try:
+            ref_object = subrepo.revparse_single(ref_sha)
+        except KeyError:
+            logging.info(
+                "%s is not found in %s; try to fetch...",
+                ref_sha,
+                subrepo.path,
+                exc_info=True,
+            )
+            fetch_object(subrepo, oid)
+            ref_object = subrepo.revparse_single(ref_sha)
         if ref.object.type == "tag":
             ref_object = ref_object.get_object()
         prev_tree_id = subrepo.revparse_single("HEAD").tree_id
@@ -341,27 +349,20 @@ def match_remote_url(repo: GHRepository, remote_url: str) -> bool:
     return remote_url in possible_clone_urls
 
 
-class LoggingRemoteCallbacks(RemoteCallbacks):
-    _last_received_bytes: int
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._last_received_bytes = 0
-
-    def sideband_progress(self, string: str):
-        logging.debug("sideband: %s", string)
-        pass
-
-    def transfer_progress(self, stats: TransferProgress):
-        if stats.received_bytes - self._last_received_bytes < 1024 * 1024:
-            return
-        logging.debug(
-            "transfer: received %s/%s objects (%s bytes)",
-            stats.received_objects,
-            stats.total_objects,
-            stats.received_bytes,
+def fetch_object(repo: Repository, oid: Oid):
+    for remote in repo.remotes:
+        logging.info("Fetching %s from %s...", oid, remote.url)
+        proc = subprocess.Popen(
+            ["git", "fetch", remote.name, oid.hex],
+            cwd=repo.workdir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
         )
-        self._last_received_bytes = stats.received_bytes
-
-    def update_tips(self, refname: str, a: Oid, b: Oid):
-        logging.debug("tip: %s: %s -> %s", refname, a.hex, b.hex)
+        with proc.stdout as stdout:
+            for diag_msg in stdout:
+                logging.debug("%s", diag_msg.rstrip())
+        if proc.wait():
+            raise GitError(
+                f"Failed to fetch object {oid.hex} from {remote.url}"
+            )
