@@ -1,7 +1,7 @@
 import logging
 import subprocess
 import tempfile
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 from github3 import GitHub
 from github3.exceptions import GitHubException
@@ -10,11 +10,9 @@ from github3.pulls import ShortPullRequest
 from github3.repos.branch import Branch
 from github3.session import BasicAuth, TokenAuth
 from pygit2 import (
-    GIT_FETCH_NO_PRUNE,
     GIT_RESET_HARD,
     GitError,
     Oid,
-    RemoteCallbacks,
     Repository,
     Signature,
 )
@@ -50,7 +48,7 @@ def update_target_repo(
         )
         return
     commit, tree_changed = updated
-    if not tree_changed:
+    if not tree_changed and not config.dry_run:
         # Although submodule became to refer to a different commit,
         # if these commits have the same tree hash (i.e., identical
         # contents), it virtually affects nothing to the behavior.
@@ -110,7 +108,18 @@ def update_target_repo(
         commit,
         config.pr_title_format,
         config.pr_description_format,
+        dry_run=config.dry_run,
     )
+    if config.dry_run:
+        assert isinstance(pr, Branch)
+        logging.info(
+            "Dry run: no pull request was opened; "
+            "the branch %s was made in the fork: %s",
+            pr.name,
+            pr.links["html"]
+        )
+        return
+    assert isinstance(pr, ShortPullRequest)
     try:
         source_repo.create_status(
             config.ref.object.sha,
@@ -246,7 +255,8 @@ def open_pull_request(
     commit: Commit,
     pr_title_format: str,
     pr_description_format: str,
-) -> ShortPullRequest:
+    dry_run: bool = False,
+) -> Union[ShortPullRequest, Branch]:
     fork = get_or_create_fork(github, target_repository)
     fork_push_url = get_authenticated_push_url(github, fork)
     remote = cloned_repository.remotes.create(
@@ -267,6 +277,8 @@ def open_pull_request(
         submodule_ref_type=ref_type,
         submodule_commit=submodule_ref.object,
     )
+    if dry_run:
+        return fork.branch(temp_branch_name)
     return target_repository.create_pull(
         pr_title_format.format(**format_ctx),
         target_branch.name,

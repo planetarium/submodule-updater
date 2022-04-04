@@ -139,7 +139,13 @@ def validate_targets(
 )
 @click.option("--pr-title", "-T", metavar="FORMAT")
 @click.option("--pr-description", "-D", metavar="FORMAT")
-@click.option("--dry-run", is_flag=True)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Do not actually open pull requests or push commits to target "
+    "repositories/branches; however, it would still make new branches, forked "
+    "repositories, and push commits"
+)
 @click.argument(
     "targets",
     metavar="TARGET_REPOSITORY:BRANCH",
@@ -181,6 +187,7 @@ def cli(
         ref=reference,
         targets=targets,
         committer=committer,
+        dry_run=dry_run,
     )
     if pr_title is not None:
         config = dataclasses.replace(config, pr_title_format=pr_title)
@@ -189,5 +196,4 @@ def cli(
             config, pr_description_format=pr_description
         )
     logging.info("Configuration: %r", config)
-    if not dry_run:
-        run(config)
+    run(config)

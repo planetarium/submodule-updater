@@ -17,6 +17,7 @@ class Config:
     ref: Reference
     targets: Mapping[GHRepository, Branch]
     committer: Signature
+    dry_run: bool
 
     # Available variables in format strings:
     #   submodule_repository: github3.repos.Repository
