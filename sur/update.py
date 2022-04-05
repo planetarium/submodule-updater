@@ -1,4 +1,5 @@
 import logging
+import re
 import subprocess
 import tempfile
 from typing import Optional, Tuple, Union
@@ -15,6 +16,7 @@ from pygit2 import (
     Oid,
     Repository,
     Signature,
+    Submodule,
 )
 from pygit2.remote import Remote, TransferProgress
 
@@ -116,7 +118,7 @@ def update_target_repo(
             "Dry run: no pull request was opened; "
             "the branch %s was made in the fork: %s",
             pr.name,
-            pr.links["html"]
+            pr.links["html"],
         )
         return
     assert isinstance(pr, ShortPullRequest)
@@ -155,7 +157,6 @@ def clone(
             "clone",
             "--branch",
             target_branch.name,
-            "--recurse-submodules",
             target_repository.clone_url,
             d,
         ],
@@ -197,9 +198,12 @@ def update_submodules(
     tree_changed = False
     count = 0
     for submodule_path in cloned_repository.listall_submodules():
-        submodule = cloned_repository.lookup_submodule(submodule_path)
+        submodule: Submodule = cloned_repository.lookup_submodule(
+            submodule_path
+        )
         if not match_remote_url(submodule_source_repository, submodule.url):
             continue
+        init_submodule(cloned_repository, submodule)
         subrepo: Repository = submodule.open()
         if subrepo.head.target == oid:
             continue
@@ -389,6 +393,50 @@ def push(repo: Repository, remote: Remote, refspec: str):
         for diag_msg in stdout:
             logging.debug("%s", diag_msg.rstrip())
     if proc.wait():
+        raise GitError(f"Failed to push {refspec} to {remote.url}")
+
+
+def init_submodule(repo: Repository, submodule: Submodule):
+    if submodule.url.startswith("git://"):
+        logging.warning(
+            "Submodule %s refers to a git:// URL, which is officially "
+            "obsolete by GitHub; consider using HTTPS or SSH instead.  "
+            "Submodule Updater anyway continues with replacing it with "
+            "an HTTPS URL.  See also: https://wp.me/pamS32-fy5",
+            submodule.path,
+        )
+        set_submodule_url(repo, submodule)
+    logging.info("Initializing submodule %s...", submodule.path)
+    proc = subprocess.Popen(
+        ["git", "submodule", "update", "--init", "--", submodule.path],
+        cwd=repo.workdir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    with proc.stdout as stdout:
+        for diag_msg in stdout:
+            logging.debug("%s", diag_msg.rstrip())
+    if proc.wait():
+        raise GitError(f"Failed to initialize submodule {submodule.path}")
+
+
+def set_submodule_url(repo: Repository, submodule: Submodule):
+    url = re.sub(r"^git://github\.com/", "https://github.com/", submodule.url)
+    if url == submodule.url:
+        return
+    logging.info("Replacing %s with %s", submodule.url, url)
+    proc = subprocess.Popen(
+        ["git", "submodule", "set-url", "--", submodule.path, url],
+        cwd=repo.workdir,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    with proc.stdout as stdout:
+        for diag_msg in stdout:
+            logging.debug("%s", diag_msg.rstrip())
+    if proc.wait():
         raise GitError(
-            f"Failed to push {refspec} to {remote.url}"
+            f"Failed to set submodule URL for {submodule.path} to {url}"
         )

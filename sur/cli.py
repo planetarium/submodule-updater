@@ -144,7 +144,7 @@ def validate_targets(
     is_flag=True,
     help="Do not actually open pull requests or push commits to target "
     "repositories/branches; however, it would still make new branches, forked "
-    "repositories, and push commits"
+    "repositories, and push commits",
 )
 @click.argument(
     "targets",
