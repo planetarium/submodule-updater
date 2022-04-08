@@ -1,6 +1,11 @@
 Submodule Updater
 =================
 
+[![GitHub Actions][GitHub Actions badge]][GitHub Actions]
+
+[GitHub Actions]: https://github.com/planetarium/submodule-updater/actions/workflows/action-test.yaml
+[GitHub Actions badge]: https://github.com/planetarium/submodule-updater/actions/workflows/action-test.yaml/badge.svg
+
 ![](screenshot.png)
 
 Submodule Updater is a GitHub action (and also is a CLI program) that lets
