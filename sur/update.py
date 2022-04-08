@@ -1,4 +1,6 @@
+import configparser
 import logging
+import os.path
 import re
 import subprocess
 import tempfile
@@ -12,6 +14,7 @@ from github3.repos.branch import Branch
 from github3.session import BasicAuth, TokenAuth
 from pygit2 import (
     GIT_RESET_HARD,
+    Config as GitConfig,
     GitError,
     Oid,
     Repository,
@@ -201,10 +204,10 @@ def update_submodules(
         submodule: Submodule = cloned_repository.lookup_submodule(
             submodule_path
         )
-        if not match_remote_url(submodule_source_repository, submodule.url):
+        submodule_url = get_submodule_url(cloned_repository, submodule)
+        if not match_remote_url(submodule_source_repository, submodule_url):
             continue
-        init_submodule(cloned_repository, submodule)
-        subrepo: Repository = submodule.open()
+        subrepo: Repository = init_submodule(cloned_repository, submodule)
         if subrepo.head.target == oid:
             continue
         try:
@@ -396,8 +399,9 @@ def push(repo: Repository, remote: Remote, refspec: str):
         raise GitError(f"Failed to push {refspec} to {remote.url}")
 
 
-def init_submodule(repo: Repository, submodule: Submodule):
-    if submodule.url.startswith("git://"):
+def init_submodule(repo: Repository, submodule: Submodule) -> Repository:
+    logging.info("Initializing submodule %s...", submodule.path)
+    if get_submodule_url(repo, submodule).startswith("git://"):
         logging.warning(
             "Submodule %s refers to a git:// URL, which is officially "
             "obsolete by GitHub; consider using HTTPS or SSH instead.  "
@@ -406,7 +410,6 @@ def init_submodule(repo: Repository, submodule: Submodule):
             submodule.path,
         )
         set_submodule_url(repo, submodule)
-    logging.info("Initializing submodule %s...", submodule.path)
     proc = subprocess.Popen(
         ["git", "submodule", "update", "--init", "--", submodule.path],
         cwd=repo.workdir,
@@ -419,24 +422,53 @@ def init_submodule(repo: Repository, submodule: Submodule):
             logging.debug("%s", diag_msg.rstrip())
     if proc.wait():
         raise GitError(f"Failed to initialize submodule {submodule.path}")
+    subrepo = submodule.open()
+    for subsub_path in subrepo.listall_submodules():
+        subsubmodule: Submodule = subrepo.lookup_submodule(subsub_path)
+        init_submodule(subrepo, subsubmodule)
+    return subrepo
 
 
 def set_submodule_url(repo: Repository, submodule: Submodule):
-    url = re.sub(r"^git://github\.com/", "https://github.com/", submodule.url)
-    if url == submodule.url:
+    orig_url = get_submodule_url(repo, submodule)
+    url = re.sub(r"^git://github\.com/", "https://github.com/", orig_url)
+    if url == orig_url:
         return
-    logging.info("Replacing %s with %s", submodule.url, url)
-    proc = subprocess.Popen(
-        ["git", "submodule", "set-url", "--", submodule.path, url],
-        cwd=repo.workdir,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
+    gitmodules_path = os.path.join(repo.workdir, ".gitmodules")
+    submodule_name = get_submodule_name(repo, submodule)
+    cfg = configparser.ConfigParser()
+    logging.debug("Reading %s...", gitmodules_path)
+    cfg.read(gitmodules_path)
+    cfg[f'submodule "{submodule_name}"']["url"] = url
+    logging.debug("Updating %s...", gitmodules_path)
+    with open(gitmodules_path, "w") as f:
+        cfg.write(f)
+
+
+def get_submodule_url(repo: Repository, submodule: Submodule) -> str:
+    try:
+        return submodule.url
+    except RuntimeError:
+        gitmodules_path = os.path.join(repo.workdir, ".gitmodules")
+        submodule_name = get_submodule_name(repo, submodule)
+        cfg = configparser.ConfigParser()
+        logging.debug("Reading %s...", gitmodules_path)
+        cfg.read(gitmodules_path)
+        return cfg[f'submodule "{submodule_name}"']["url"]
+
+
+def get_submodule_name(repo: Repository, submodule: Submodule) -> str:
+    gitmodules_path = os.path.join(repo.workdir, ".gitmodules")
+    gitmodules = GitConfig(gitmodules_path)
+    logging.debug("Reading %s...", gitmodules_path)
+    for c in gitmodules:
+        if (
+            c.name.startswith("submodule.")
+            and c.name.endswith(".path")
+            and c.value == submodule.path
+        ):
+            return c.name[10:-5]
+    raise GitError(
+        f"Failed to find the submodule entry for {submodule.path} "
+        f"in {gitmodules_path}"
     )
-    with proc.stdout as stdout:
-        for diag_msg in stdout:
-            logging.debug("%s", diag_msg.rstrip())
-    if proc.wait():
-        raise GitError(
-            f"Failed to set submodule URL for {submodule.path} to {url}"
-        )

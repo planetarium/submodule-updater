@@ -21,6 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
+    - uses: psf/black@stable
     - uses: ./
       with:
         token: ${{ secrets.SUBMODULE_UPDATER_GH_TOKEN }}
