@@ -27,6 +27,7 @@ jobs:
         committer: >-
           Submodule Updater <engineering+submodule-updater@planetariumhq.com>
         targets: |
+          planetarium/libplanet:branch-may-not-exist-can-be-marked-with-qmark?
           planetarium/lib9c:main
           planetarium/NineChronicles:main
         dry-run: true

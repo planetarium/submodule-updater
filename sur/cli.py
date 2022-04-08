@@ -89,11 +89,17 @@ def validate_targets(
             raise click.BadParameter(
                 f"Invalid GitHub repository: {r}", ctx, param
             )
+        optional = branch and branch.endswith("?")
+        if optional:
+            branch = branch.rstrip("?")
         try:
             r = ctx.obj.repository(**m.groupdict())
             b = r.branch(branch or r.default_branch)
         except NotFoundError as e:
-            raise click.BadParameter(f"{e.message}: {target}", ctx, param)
+            if optional:
+                logging.warning("%s: %s; skipping...", target, str(e))
+                continue
+            raise click.BadParameter(f"{target}: {e.message}", ctx, param)
         except Exception as e:
             raise click.BadParameter(str(e), ctx, param)
         branches[r] = b
