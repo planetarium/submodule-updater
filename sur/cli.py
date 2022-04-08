@@ -177,6 +177,8 @@ def cli(
     that needs to update its submodule(s) referring the source repository.
 
     BRANCH is the branch name in the target repository that will be updated.
+    A BRANCH with a trailing question mark, which is a mark for optional
+    branches, is silently ignored iff it does not exist.
 
     """
     try:

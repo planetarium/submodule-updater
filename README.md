@@ -47,6 +47,7 @@ manually invoked as a CLI program on your terminal though.)
       org/repo:branch
       org/foo:master
       org/bar:main
+      org/baz:branch-may-not-exist?  # A trailing ? allows branch's absence
 ~~~
 
 You can customize the pull request template:
@@ -57,6 +58,7 @@ You can customize the pull request template:
   with:
     token: ${{ secrets.GH_PAT }}  # PAT of a bot account on GitHub
     committer: "Submodule Updater <bot@example.com>"
+    targets: org/repo:branch
     # Note that below messages are just default settings:
     pr-title: "Update {submodule_repository.name} to {submodule_ref_name}"
     pr-description: >
