@@ -4,7 +4,8 @@ import os.path
 import re
 import subprocess
 import tempfile
-from typing import Optional, Tuple, Union
+import textwrap
+from typing import Optional, Tuple, Union, TextIO
 
 from github3 import GitHub
 from github3.exceptions import GitHubException
@@ -393,10 +394,24 @@ def push(repo: Repository, remote: Remote, refspec: str):
         text=True,
     )
     with proc.stdout as stdout:
-        for diag_msg in stdout:
-            logging.debug("%s", diag_msg.rstrip())
+        logfile, log_excerpt = log_subprocess_output(stdout)
+    excerpt_lines = log_excerpt.count("\n")
+    log_excerpt = textwrap.indent(log_excerpt, "  ")
     if proc.wait():
-        raise GitError(f"Failed to push {refspec} to {remote.url}")
+        raise GitError(
+            f"Failed to push {refspec} to {remote.url}; "
+            f"the last {excerpt_lines} lines of the log are "
+            f"(the complete log file: {logfile}):\n{log_excerpt}"
+        )
+    logging.info(
+        "Pushed %s to %s; the last %s lines of the log are (the complete "
+        "log file: %s):\n%s",
+        refspec,
+        remote.url,
+        excerpt_lines,
+        logfile,
+        log_excerpt,
+    )
 
 
 def init_submodule(repo: Repository, submodule: Submodule) -> Repository:
@@ -472,3 +487,23 @@ def get_submodule_name(repo: Repository, submodule: Submodule) -> str:
         f"Failed to find the submodule entry for {submodule.path} "
         f"in {gitmodules_path}"
     )
+
+
+def log_subprocess_output(
+    readable: TextIO, excerpt_lines: int = 15
+) -> Tuple[str, str]:
+    excerpt = []
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        prefix="submodule-updater-",
+        suffix=".log",
+        delete=False,
+    ) as logfile:
+        for diag_msg in readable:
+            logfile.write(diag_msg)
+            logging.debug("%s", diag_msg.rstrip())
+            if len(excerpt) >= excerpt_lines:
+                excerpt.pop(0)
+            excerpt.append(diag_msg)
+        logfile.flush()
+        return logfile.name, "".join(excerpt)
