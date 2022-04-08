@@ -14,11 +14,13 @@ from .update import run
 
 
 def validate_github_token(ctx, param, token: str) -> GitHub:
+    if not token.strip():
+        raise click.BadParameter("No GitHub token provided.", ctx, param)
     try:
         github = login(token=token)
         logging.debug("logged in to user %r", github.me())
     except Exception as e:
-        raise click.BadParameter(str(e))
+        raise click.BadParameter(str(e), ctx, param)
     ctx.obj = github
     return github
 
