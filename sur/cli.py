@@ -1,9 +1,11 @@
 import dataclasses
 import logging
 import re
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, Optional, Sequence, Iterator
 
 import click
+from click.core import Context, Parameter
+
 from github3 import GitHub, login
 from github3.exceptions import NotFoundError
 from github3.repos.branch import Branch
@@ -77,36 +79,76 @@ def validate_signature(ctx, param, signature: str) -> Signature:
     )
 
 
-def validate_targets(
-    ctx, param, targets: Sequence[str]
+def find_latest_branch(repo: GHRepository, branch_startswith: str) -> Branch:
+    branches: Iterator[Branch] = repo.branches()
+    branches = [branch for branch in branches if branch.name.startswith(branch_startswith)]
+
+    branches.sort(key=lambda b: int(re.search(r'\d+$', b.name).group()), reverse=True)
+
+    if not branches:
+        raise NotFoundError(f"Not found startswith '{branch_startswith}' branch")
+
+    return branches[0]
+
+
+def acquire_valid_branches_for_repos(
+    target: str,
+    is_optional: bool,
+    auto_latest_branch: bool,
+    ctx: Context,
+    param: Parameter,
+    repo_dict: dict
+) -> Optional[Branch]:
+    try:
+        repository = ctx.obj.repository(**repo_dict)
+        
+        if auto_latest_branch:
+            branch = find_latest_branch(repository, target.replace("refs/heads/", ""))
+            target = f"refs/heads/{branch.name}"
+        else:
+            branch_name = target or repository.default_branch
+            branch = repository.branch(branch_name)
+
+    except NotFoundError as e:
+        if is_optional:
+            logging.warning("%s: %s; skipping...", target, str(e))
+            return None
+        raise click.BadParameter(f"{target}: {e.message}", ctx, param)
+    except Exception as e:
+        raise click.BadParameter(str(e), ctx, param)
+
+    return branch
+
+
+def validate_and_acquire_branches(
+    ctx: Context,
+    param: Parameter,
+    targets: Sequence[str]
 ) -> Mapping[GHRepository, Branch]:
-    branches = {}
+    validated_branches = {}
     for target in targets:
         try:
             repo, branch = target.split(":", 1)
         except ValueError:
-            raise click.BadParameter(f"No branch name: {r}")
-        m = GITHUB_REPOSITORY_RE.match(repo)
-        if not m:
-            raise click.BadParameter(
-                f"Invalid GitHub repository: {r}", ctx, param
-            )
-        optional = branch and branch.endswith("?")
-        if optional:
-            branch = branch.rstrip("?")
-        try:
-            r = ctx.obj.repository(**m.groupdict())
-            b = r.branch(branch or r.default_branch)
-        except NotFoundError as e:
-            if optional:
-                logging.warning("%s: %s; skipping...", target, str(e))
-                continue
-            raise click.BadParameter(f"{target}: {e.message}", ctx, param)
-        except Exception as e:
-            raise click.BadParameter(str(e), ctx, param)
-        branches[r] = b
-    return branches
+            raise click.BadParameter(f"No branch name: {target}")
+        repo_dict = GITHUB_REPOSITORY_RE.match(repo).groupdict()
+        
+        if not repo_dict:
+            raise click.BadParameter(f"Invalid GitHub repository: {target}", ctx, param)
+        
+        is_optional = branch and branch.endswith("?")
+        auto_latest_branch = branch and branch.endswith("*")
 
+        if auto_latest_branch:
+            branch = branch.rstrip("*")
+        if is_optional:
+            branch = branch.rstrip("?")
+
+        branch_obj = acquire_valid_branches_for_repos(branch, is_optional, auto_latest_branch, ctx, param, repo_dict)
+        if branch_obj:
+            validated_branches[ctx.obj.repository(**repo_dict)] = branch_obj
+
+    return validated_branches
 
 @click.command()
 @click.option(
@@ -159,7 +201,7 @@ def validate_targets(
     metavar="TARGET_REPOSITORY:BRANCH",
     required=True,
     nargs=-1,
-    callback=validate_targets,
+    callback=validate_and_acquire_branches,
 )
 @click.pass_context
 def cli(
