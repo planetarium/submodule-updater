@@ -22,7 +22,7 @@ from pygit2 import (
     Signature,
     Submodule,
 )
-from pygit2.remote import Remote, TransferProgress
+from pygit2.remotes import Remote, TransferProgress
 
 from .config import Config, GHRepository
 
